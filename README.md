@@ -30,8 +30,8 @@ PostFlow AI is a modern, high-performance SaaS web application built with Next.j
 
 5. **365-Day Content Series Planner**
    - Create structured multi-day campaigns (e.g. *365-Day SEO Mastery Series*).
-   - Automated batch AI generator (Day 1 through Day 365).
-   - 1-click **Schedule All Ready Posts** into the background queue.
+   - Generate posts from each day's saved topic without replacing the curated topic.
+   - The canonical 365-day SEO plan is published one ready day at a time by the background worker.
 
 6. **AI Writer & Prompt Strategist**
    - Tailored prompt engine parameterized by **Topic**, **Content Goal**, **Tone**, **Audience**, and **Length**.
@@ -186,8 +186,12 @@ Generate secrets locally with `node -e "console.log(require('crypto').randomByte
 
 Before sending traffic to a new database, run `npm run db:migrate:deploy` with `DATABASE_URL` and `DIRECT_DATABASE_URL` set to that Neon database. Deploy the app to Vercel only after the database migrations complete.
 
-#### Scheduled publishing while your computer is off
-The GitHub Actions workflow at `.github/workflows/linkedin-scheduled-publishing.yml` checks for due posts every 10 minutes and calls the production worker. It runs in GitHub's cloud, so your computer does not need to stay on. Scheduled workflow runs may be delayed during high load, so publishing is not guaranteed at the exact minute. The workflow uses GitHub's short-lived OIDC identity token, restricted to this repository and workflow; no GitHub Actions secret needs to be configured. It can also be started manually from the repository's Actions tab. Only posts already scheduled in the app are published; the workflow does not generate a new post every day.
+#### Daily publishing while your computer is off
+The GitHub Actions workflow at `.github/workflows/linkedin-scheduled-publishing.yml` checks for due posts every 10 minutes and calls the production worker. It runs in GitHub's cloud, so your computer does not need to stay on. Scheduled workflow runs may be delayed during high load, so publishing is not guaranteed at the exact minute. The workflow uses GitHub's short-lived OIDC identity token, restricted to this repository and workflow; no GitHub Actions secret needs to be configured.
+
+For the canonical 365-day SEO plan, the worker uses the next `READY` saved topic and prepares at most one post per day at **19:30 Pakistan time**. It creates a 1080×1080 branded PNG locally using the configured navy, purple, magenta, blue, and cyan palette; image rendering does not call a paid image-generation service or require an image API key. The PNG is attached to the LinkedIn post and uploaded before publishing. If image upload fails, the worker will not publish a text-only substitute. The linked LinkedIn account must remain connected and authorized. Posts already marked scheduled or published are not regenerated, and missed days are not bulk-published as a backlog.
+
+The bulk scheduler is intentionally disabled for this canonical 365-day series. Other series can still be bulk-scheduled, but entries whose scheduled time is already past are skipped. The workflow can also be started manually from the repository's Actions tab; manually running it will still honor the daily posting time and one-post-per-day limit.
 
 Vercel Hobby cron jobs can run only once per day, which is too infrequent for scheduled LinkedIn publishing. If you prefer another external cron provider (for example, cron-job.org), configure it to send a **GET** request every 10 minutes to `https://<your-domain>/api/worker/tick`, with this HTTP header:
 

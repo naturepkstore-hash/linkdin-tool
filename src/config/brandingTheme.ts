@@ -1,6 +1,21 @@
 /**
  * Official Brand & Visual Style System for 365-Day LinkedIn SEO Series
  */
+export const BRAND_PALETTE = {
+  background: '#060814',
+  backgroundAlt: '#0a0d1f',
+  purple: '#a855f7',
+  purpleDeep: '#9333ea',
+  magenta: '#ec4899',
+  magentaDeep: '#d946ef',
+  blue: '#3b82f6',
+  blueDeep: '#2563eb',
+  cyan: '#06b6d4',
+  cyanBright: '#22d3ee',
+  white: '#ffffff',
+  softWhite: '#f1f5f9',
+} as const;
+
 export const BRAND_THEME = {
   background: 'Deep Navy / Near Black (#060814 / #0a0d1f)',
   primary: 'Neon Purple (#a855f7 / #9333ea)',

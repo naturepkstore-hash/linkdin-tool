@@ -239,6 +239,8 @@ export default function ContentSeriesPage() {
         alert(`Successfully scheduled ${data.scheduledCount} posts to your LinkedIn queue!`);
         await loadSeriesDetails(selectedSeries.id);
         await loadSeries();
+      } else {
+        alert(data.error?.message || 'Could not schedule these posts.');
       }
     } catch (e) {
       console.error(e);
@@ -279,7 +281,7 @@ export default function ContentSeriesPage() {
             <span>Content Series & 365-Day Plan</span>
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Build long-term authority series, import pre-made 365-day plans, or batch-schedule full campaigns.
+            Build long-term authority series, import pre-made plans, or safely schedule future campaign posts.
           </p>
         </div>
 

@@ -54,13 +54,19 @@ export async function processPublishJob(postId: string): Promise<{
 
     // 5. Verify LinkedIn account connection
     if (!post.socialAccount || !post.socialAccount.accessTokenEncrypted) {
-      await prisma.post.update({
-        where: { id: postId },
-        data: {
-          status: 'FAILED',
-          failureReason: 'No connected LinkedIn account or access token found.',
-          lastError: 'NO_LINKEDIN_ACCOUNT',
-        },
+      await prisma.$transaction(async (transaction) => {
+        await transaction.post.update({
+          where: { id: postId },
+          data: {
+            status: 'FAILED',
+            failureReason: 'No connected LinkedIn account or access token found.',
+            lastError: 'NO_LINKEDIN_ACCOUNT',
+          },
+        });
+        await transaction.seriesPost.updateMany({
+          where: { postId, status: 'SCHEDULED' },
+          data: { status: 'FAILED' },
+        });
       });
 
       await createNotification({
@@ -121,12 +127,24 @@ export async function processPublishJob(postId: string): Promise<{
             );
             if (assetUrn) {
               mediaAssetUrns.push(assetUrn);
+            } else if (post.contentType === 'IMAGE') {
+              throw new Error(`LinkedIn did not return an image asset for ${m.fileName}.`);
             }
           }
         } catch (mediaErr) {
+          if (post.contentType === 'IMAGE') {
+            throw new Error(`Required image upload failed for ${m.fileName}.`, { cause: mediaErr });
+          }
           console.error('[Scheduler Worker] Media upload failed for file:', m.fileName, mediaErr);
         }
       }
+    }
+
+    if (
+      post.contentType === 'IMAGE' &&
+      (post.media.length === 0 || mediaAssetUrns.length !== post.media.length)
+    ) {
+      throw new Error('Image post cannot be published because its required image was not uploaded.');
     }
 
     // 7. Execute publishing via Official LinkedIn API
@@ -139,16 +157,22 @@ export async function processPublishJob(postId: string): Promise<{
 
     if (publishResult.success && publishResult.postId) {
       // 7. Success state transition: PROCESSING -> PUBLISHED
-      await prisma.post.update({
-        where: { id: postId },
-        data: {
-          status: 'PUBLISHED',
-          publishedAt: new Date(),
-          providerPostId: publishResult.postId,
-          providerPostUrl: publishResult.postUrl,
-          failureReason: null,
-          lastError: null,
-        },
+      await prisma.$transaction(async (transaction) => {
+        await transaction.post.update({
+          where: { id: postId },
+          data: {
+            status: 'PUBLISHED',
+            publishedAt: new Date(),
+            providerPostId: publishResult.postId,
+            providerPostUrl: publishResult.postUrl,
+            failureReason: null,
+            lastError: null,
+          },
+        });
+        await transaction.seriesPost.updateMany({
+          where: { postId, status: 'SCHEDULED' },
+          data: { status: 'PUBLISHED' },
+        });
       });
 
       // Update or create initial Analytics record
@@ -219,13 +243,19 @@ export async function processPublishJob(postId: string): Promise<{
         };
       } else {
         // Mark as FAILED
-        await prisma.post.update({
-          where: { id: postId },
-          data: {
-            status: 'FAILED',
-            failureReason: errorMessage,
-            lastError: errorCode,
-          },
+        await prisma.$transaction(async (transaction) => {
+          await transaction.post.update({
+            where: { id: postId },
+            data: {
+              status: 'FAILED',
+              failureReason: errorMessage,
+              lastError: errorCode,
+            },
+          });
+          await transaction.seriesPost.updateMany({
+            where: { postId, status: 'SCHEDULED' },
+            data: { status: 'FAILED' },
+          });
         });
 
         await createAuditLog({

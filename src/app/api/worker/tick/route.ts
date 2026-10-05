@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { runDueScheduledPosts } from '@/lib/scheduler';
 import { isValidGitHubActionsToken } from '@/lib/github-actions-auth';
+import { scheduleDueDailySeriesPosts } from '@/lib/daily-publishing';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -30,9 +31,11 @@ async function runWorker(request: Request) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
+    const scheduledDailyCount = await scheduleDueDailySeriesPosts();
     const processedCount = await runDueScheduledPosts();
     return NextResponse.json({
       success: true,
+      scheduledDailyCount,
       processedCount,
       timestamp: new Date().toISOString(),
     });

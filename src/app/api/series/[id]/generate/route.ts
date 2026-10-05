@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { generateLinkedInPost } from '@/lib/ai';
+import { SEO_365_PLAN } from '@/data/seo365Plan';
+import { isCanonicalSeo365Series } from '@/lib/seo365';
 
 export async function POST(
   request: Request,
@@ -25,21 +27,33 @@ export async function POST(
       return NextResponse.json({ success: false, error: { message: 'Series not found' } }, { status: 404 });
     }
 
+    const existingSeriesPosts = await prisma.seriesPost.findMany({
+      where: { seriesId: id },
+      select: { dayNumber: true, topic: true, status: true, postId: true },
+    });
+    const canonicalSeoSeries =
+      series.totalDays === SEO_365_PLAN.length && isCanonicalSeo365Series(existingSeriesPosts);
+    const existingByDay = new Map(existingSeriesPosts.map((post) => [post.dayNumber, post]));
     const generatedDays = [];
     const maxDay = Math.min(endDay, series.totalDays || 365);
 
     for (let day = startDay; day <= maxDay; day++) {
-      const topic = `Day ${day}: Strategic deep-dive into ${series.name}`;
+      const existing = existingByDay.get(day);
+      if (existing?.postId || existing?.status === 'SCHEDULED' || existing?.status === 'PUBLISHED') {
+        continue;
+      }
+
+      const topic =
+        existing?.topic ||
+        (canonicalSeoSeries ? SEO_365_PLAN[day - 1]?.topic : undefined) ||
+        `Day ${day}: Key insight on ${series.name}`;
       const aiResult = await generateLinkedInPost({
-        topic: `${series.name} - Day ${day} Lesson`,
+        topic,
         goal,
         tone,
         audience: 'LinkedIn Creators & Professionals',
         length: 'Medium',
       });
-
-      const scheduledDate = new Date(series.startDate);
-      scheduledDate.setDate(series.startDate.getDate() + (day - 1));
 
       const updatedOrCreated = await prisma.seriesPost.upsert({
         where: {
@@ -49,10 +63,8 @@ export async function POST(
           },
         },
         update: {
-          topic,
           content: aiResult.content,
           status: 'READY',
-          scheduledDate,
           scheduledTime: series.postingTime,
         },
         create: {
@@ -61,7 +73,6 @@ export async function POST(
           topic,
           content: aiResult.content,
           status: 'READY',
-          scheduledDate,
           scheduledTime: series.postingTime,
         },
       });
