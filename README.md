@@ -186,8 +186,10 @@ Generate secrets locally with `node -e "console.log(require('crypto').randomByte
 
 Before sending traffic to a new database, run `npm run db:migrate:deploy` with `DATABASE_URL` and `DIRECT_DATABASE_URL` set to that Neon database. Deploy the app to Vercel only after the database migrations complete.
 
-#### Scheduled publishing on Vercel Hobby
-Vercel Hobby cron jobs can run only once per day, which is too infrequent for scheduled LinkedIn publishing. The project therefore does not declare a Vercel cron. Configure an external cron provider (for example, cron-job.org) to send a **GET** request every 10 minutes to `https://<your-domain>/api/worker/tick`, with this HTTP header:
+#### Scheduled publishing while your computer is off
+The GitHub Actions workflow at `.github/workflows/linkedin-scheduled-publishing.yml` checks for due posts every 10 minutes and calls the production worker. It runs in GitHub's cloud, so your computer does not need to stay on. Scheduled workflow runs may be delayed during high load, so publishing is not guaranteed at the exact minute. Add a repository Actions secret named `CRON_SECRET` with the same value configured in Vercel (**Settings → Secrets and variables → Actions → New repository secret**). The workflow can also be started manually from the repository's Actions tab. Only posts already scheduled in the app are published; the workflow does not generate a new post every day.
+
+Vercel Hobby cron jobs can run only once per day, which is too infrequent for scheduled LinkedIn publishing. If you prefer another external cron provider (for example, cron-job.org), configure it to send a **GET** request every 10 minutes to `https://<your-domain>/api/worker/tick`, with this HTTP header:
 
 ```text
 Authorization: Bearer <the same CRON_SECRET configured in Vercel>
