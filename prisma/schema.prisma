@@ -1,0 +1,245 @@
+datasource db {
+  provider = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String          @id @default(cuid())
+  name          String
+  email         String          @unique
+  passwordHash  String
+  avatarUrl     String?
+  role          String          @default("USER") // USER, ADMIN
+  timezone      String          @default("UTC")
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  socialAccounts SocialAccount[]
+  posts          Post[]
+  media          Media[]
+  contentSeries  ContentSeries[]
+  hashtags       Hashtag[]
+  auditLogs      AuditLog[]
+  notifications  Notification[]
+  settings       UserSettings?
+
+  @@index([email])
+}
+
+model SocialAccount {
+  id                    String    @id @default(cuid())
+  userId                String
+  provider              String    @default("linkedin")
+  providerAccountId     String
+  displayName           String
+  profileUrl            String?
+  avatarUrl             String?
+  headline              String?
+  accessTokenEncrypted  String
+  refreshTokenEncrypted String?
+  tokenExpiresAt        DateTime?
+  scopes                String?
+  status                String    @default("CONNECTED") // CONNECTED, EXPIRED, REVOKED, DISCONNECTED
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  posts Post[]
+
+  @@unique([userId, provider, providerAccountId])
+  @@index([userId])
+}
+
+model Post {
+  id              String      @id @default(cuid())
+  userId          String
+  socialAccountId String?
+  content         String
+  contentType     String      @default("TEXT") // TEXT, IMAGE, MULTI_IMAGE, ARTICLE_LINK
+  status          String      @default("DRAFT") // DRAFT, READY, SCHEDULED, PROCESSING, PUBLISHED, FAILED, CANCELLED
+  scheduledAt     DateTime?
+  publishedAt     DateTime?
+  timezone        String      @default("UTC")
+  providerPostId  String?
+  providerPostUrl String?
+  failureReason   String?
+  retryCount      Int         @default(0)
+  lastError       String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  socialAccount SocialAccount? @relation(fields: [socialAccountId], references: [id], onDelete: SetNull)
+  media         Media[]
+  seriesPosts   SeriesPost[]
+  analytics     Analytics?
+  scheduledJobs ScheduledJob[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([scheduledAt])
+}
+
+model Media {
+  id         String   @id @default(cuid())
+  userId     String
+  postId     String?
+  fileName   String
+  fileUrl    String
+  storageKey String?
+  mimeType   String
+  fileSize   Int
+  width      Int?
+  height     Int?
+  createdAt  DateTime @default(now())
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post? @relation(fields: [postId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([postId])
+}
+
+model ContentSeries {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  startDate   DateTime
+  frequency   String   @default("DAILY") // DAILY, WEEKLY, CUSTOM
+  postingTime String   @default("09:00")
+  timezone    String   @default("UTC")
+  status      String   @default("ACTIVE") // ACTIVE, PAUSED, COMPLETED, DRAFT
+  totalDays   Int      @default(30)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seriesPosts SeriesPost[]
+
+  @@index([userId])
+}
+
+model SeriesPost {
+  id            String    @id @default(cuid())
+  seriesId      String
+  postId        String?
+  dayNumber     Int
+  topic         String
+  content       String?
+  status        String    @default("IDEA") // IDEA, DRAFT, READY, SCHEDULED, PUBLISHED, FAILED
+  scheduledDate DateTime?
+  scheduledTime String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  series ContentSeries @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  post   Post?         @relation(fields: [postId], references: [id], onDelete: SetNull)
+
+  @@unique([seriesId, dayNumber])
+  @@index([seriesId])
+}
+
+model Hashtag {
+  id         String   @id @default(cuid())
+  userId     String
+  name       String
+  usageCount Int      @default(1)
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+model Analytics {
+  id             String    @id @default(cuid())
+  postId         String    @unique
+  impressions    Int       @default(0)
+  reactions      Int       @default(0)
+  comments       Int       @default(0)
+  reposts        Int       @default(0)
+  clicks         Int       @default(0)
+  engagementRate Float     @default(0.0)
+  lastSyncedAt   DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+}
+
+model ScheduledJob {
+  id           String    @id @default(cuid())
+  postId       String
+  jobId        String    @unique
+  scheduledFor DateTime
+  status       String    @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED, CANCELLED
+  attempts     Int       @default(0)
+  maxAttempts  Int       @default(3)
+  lastError    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([scheduledFor])
+  @@index([status])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  action     String
+  entityType String
+  entityId   String?
+  details    String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      String   @default("INFO") // SUCCESS, ERROR, WARNING, INFO
+  isRead    Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+}
+
+model UserSettings {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  defaultPostingTime String   @default("09:00")
+  defaultTimezone    String   @default("UTC")
+  defaultTone        String   @default("Professional")
+  defaultAudience    String   @default("General LinkedIn Audience")
+  defaultLength      String   @default("Medium")
+  notifyOnSuccess    Boolean  @default(true)
+  notifyOnFailure    Boolean  @default(true)
+  notifyOnReminder   Boolean  @default(true)
+  aiProvider         String   @default("builtin")
+  aiApiKeyEncrypted  String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
