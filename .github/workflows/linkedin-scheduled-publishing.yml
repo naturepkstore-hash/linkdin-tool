@@ -1,0 +1,33 @@
+name: LinkedIn scheduled publishing
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scheduled-publishing
+  cancel-in-progress: false
+
+jobs:
+  publish-due-posts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Run the scheduled-post worker
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::Add CRON_SECRET in the repository's Actions secrets."
+            exit 1
+          fi
+
+          curl --fail-with-body --silent --show-error --max-time 300 \
+            --retry 2 --retry-all-errors --retry-delay 5 \
+            --request POST \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            https://linkdin-tool.vercel.app/api/worker/tick
