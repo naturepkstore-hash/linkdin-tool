@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: scheduled-publishing
@@ -18,16 +19,17 @@ jobs:
     timeout-minutes: 6
     steps:
       - name: Run the scheduled-post worker
-        env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        shell: bash
         run: |
-          if [ -z "$CRON_SECRET" ]; then
-            echo "::error::Add CRON_SECRET in the repository's Actions secrets."
-            exit 1
-          fi
-
+          set -euo pipefail
+          : "${ACTIONS_ID_TOKEN_REQUEST_URL:?GitHub OIDC URL is unavailable}"
+          : "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:?GitHub OIDC token request is unavailable}"
+          token_url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=postflow-scheduled-publishing"
+          token="$(curl --fail-with-body --silent --show-error \
+            --header "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${token_url}" | jq --exit-status --raw-output '.value')"
           curl --fail-with-body --silent --show-error --max-time 300 \
             --retry 2 --retry-all-errors --retry-delay 5 \
             --request POST \
-            --header "Authorization: Bearer ${CRON_SECRET}" \
+            --header "Authorization: Bearer ${token}" \
             https://linkdin-tool.vercel.app/api/worker/tick
