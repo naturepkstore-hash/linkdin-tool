@@ -1,0 +1,7 @@
+.env*
+!.env.example
+.git
+.vercel
+.next
+node_modules
+prisma/dev.db
