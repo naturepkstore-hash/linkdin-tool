@@ -107,9 +107,10 @@ npm run db:migrate:deploy
 
 $env:SQLITE_DATABASE_URL = "file:./dev.db"
 $env:TARGET_DATABASE_URL = $env:DIRECT_DATABASE_URL
+$env:TARGET_ENCRYPTION_KEY = "a-new-random-production-encryption-key"
 npm run db:migrate:sqlite
 ```
-The migration refuses to write if any target table already contains records. It copies database records without printing record contents; it does not copy media file bytes from `public/uploads`. Keep the existing `ENCRYPTION_KEY` unchanged so stored LinkedIn tokens can still be decrypted.
+The migration refuses to write if any target table already contains records. It uses the local `ENCRYPTION_KEY` to decrypt existing encrypted values and re-encrypts them with `TARGET_ENCRYPTION_KEY`; configure that same new key as `ENCRYPTION_KEY` in production and keep it backed up. It copies database records without printing record contents; it does not copy media file bytes from `public/uploads`.
 
 **Default Demo Credentials:**
 - **Email:** `alex.rivera@postflow.ai`
@@ -175,7 +176,7 @@ In Vercel project settings, set these Production environment variables:
 - `DATABASE_URL`: Neon pooled connection URL.
 - `DIRECT_DATABASE_URL`: Neon direct connection URL (Prisma migrations use this).
 - `JWT_SECRET`: random value of at least 32 characters.
-- `ENCRYPTION_KEY`: keep the existing value if migrating accounts with encrypted tokens.
+- `ENCRYPTION_KEY`: use the same strong production key supplied as `TARGET_ENCRYPTION_KEY` during data migration; back it up because stored tokens depend on it.
 - `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, `LINKEDIN_REDIRECT_URI`: valid LinkedIn OAuth app values; register the exact callback URL `https://<your-domain>/api/linkedin/callback`.
 - `APP_URL`: `https://<your-domain>`.
 - `CRON_SECRET`: random value of at least 16 characters, shared with the external cron service.

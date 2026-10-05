@@ -1,5 +1,6 @@
 import { loadEnvConfig } from '@next/env';
 import { execFileSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -17,6 +18,8 @@ function requiredEnvironmentVariable(name: string): string {
 
 const sqliteUrl = requiredEnvironmentVariable('SQLITE_DATABASE_URL');
 const targetUrl = requiredEnvironmentVariable('TARGET_DATABASE_URL');
+const sourceEncryptionKey = requiredEnvironmentVariable('ENCRYPTION_KEY');
+const targetEncryptionKey = requiredEnvironmentVariable('TARGET_ENCRYPTION_KEY');
 
 if (!sqliteUrl.startsWith('file:')) {
   throw new Error('Set SQLITE_DATABASE_URL to the existing SQLite database URL.');
@@ -24,6 +27,54 @@ if (!sqliteUrl.startsWith('file:')) {
 
 if (!/^postgres(?:ql)?:\/\//.test(targetUrl)) {
   throw new Error('Set TARGET_DATABASE_URL to the target PostgreSQL connection URL.');
+}
+
+if (targetEncryptionKey.length < 32 || targetEncryptionKey.startsWith('64-hex-')) {
+  throw new Error('TARGET_ENCRYPTION_KEY must be a real secret with at least 32 characters.');
+}
+
+function deriveEncryptionKey(secret: string): Buffer {
+  return crypto.createHash('sha256').update(secret).digest();
+}
+
+function decryptWithKey(value: string, secret: string): string {
+  const parts = value.split(':');
+  if (parts.length !== 3) return value;
+
+  const decipher = crypto.createDecipheriv(
+    'aes-256-gcm',
+    deriveEncryptionKey(secret),
+    Buffer.from(parts[0], 'hex'),
+  );
+  decipher.setAuthTag(Buffer.from(parts[1], 'hex'));
+  return decipher.update(parts[2], 'hex', 'utf8') + decipher.final('utf8');
+}
+
+function encryptWithKey(value: string, secret: string): string {
+  if (!value) return value;
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv('aes-256-gcm', deriveEncryptionKey(secret), iv);
+  const encrypted = cipher.update(value, 'utf8', 'hex') + cipher.final('hex');
+  return `${iv.toString('hex')}:${cipher.getAuthTag().toString('hex')}:${encrypted}`;
+}
+
+function reencryptField(
+  rows: unknown[],
+  field: string,
+  sourceKey: string,
+  destinationKey: string,
+): unknown[] {
+  return rows.map((row) => {
+    if (!row || typeof row !== 'object' || !(field in row)) return row;
+    const record = row as Record<string, unknown>;
+    const value = record[field];
+    if (typeof value !== 'string' || !value) return row;
+
+    return {
+      ...record,
+      [field]: encryptWithKey(decryptWithKey(value, sourceKey), destinationKey),
+    };
+  });
 }
 
 const schemaPath = path.resolve('prisma/schema.prisma');
@@ -116,6 +167,34 @@ async function migrate(): Promise<void> {
       const sourceModel = getModel(sqlite, delegate);
       rowsByModel.set(delegate, await sourceModel.findMany());
     }
+
+    rowsByModel.set(
+      'socialAccount',
+      reencryptField(
+        rowsByModel.get('socialAccount') ?? [],
+        'accessTokenEncrypted',
+        sourceEncryptionKey,
+        targetEncryptionKey,
+      ),
+    );
+    rowsByModel.set(
+      'socialAccount',
+      reencryptField(
+        rowsByModel.get('socialAccount') ?? [],
+        'refreshTokenEncrypted',
+        sourceEncryptionKey,
+        targetEncryptionKey,
+      ),
+    );
+    rowsByModel.set(
+      'userSettings',
+      reencryptField(
+        rowsByModel.get('userSettings') ?? [],
+        'aiApiKeyEncrypted',
+        sourceEncryptionKey,
+        targetEncryptionKey,
+      ),
+    );
 
     const inserts = modelDelegates
       .map((delegate) => {
