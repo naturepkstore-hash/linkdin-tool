@@ -115,12 +115,12 @@ async function runTests() {
   const pktSchedule = zonedDateTimeToUtc(
     { year: 2026, month: 10, day: 5 },
     19,
-    30,
+    15,
     'Asia/Karachi',
   );
   assert(
-    pktSchedule.toISOString() === '2026-10-05T14:30:00.000Z',
-    'Pakistan 19:30 posting time is converted to the correct UTC instant',
+    pktSchedule.toISOString() === '2026-10-05T14:15:00.000Z',
+    'Pakistan 19:15 posting time is converted to the correct UTC instant',
   );
   const pktDayBounds = getLocalDayBounds(new Date('2026-10-05T17:00:00.000Z'), 'Asia/Karachi');
   assert(

@@ -26,7 +26,7 @@ export const BRAND_THEME = {
   effects: 'Neon glow + subtle gradients + glassmorphism',
   cards: 'Dark glass (bg-white/5 backdrop-blur-md) with subtle glowing borders',
   buttons: 'Purple → Blue/Cyan smooth gradient',
-  preferredDailyPostingTime: '19:30', // PKT Daily posting time
+  preferredDailyPostingTime: '19:15', // PKT Daily posting time
 };
 
 export function buildImagePromptForDay(dayNumber: number, topic: string, takeaways: string[]): string {
