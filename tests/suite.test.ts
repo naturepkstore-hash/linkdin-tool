@@ -7,6 +7,7 @@ import { SEO_365_PLAN } from '../src/data/seo365Plan';
 import { generateBrandedDailyImage } from '../src/lib/brand-image';
 import { isCanonicalSeo365Series } from '../src/lib/seo365';
 import { getLocalDayBounds, getLocalDateParts, zonedDateTimeToUtc } from '../src/lib/timezone';
+import { generateLinkedInPost, getTopicSpecificTakeaways } from '../src/lib/ai';
 
 async function runTests() {
   console.log('--------------------------------------------------');
@@ -133,11 +134,50 @@ async function runTests() {
     'UTC conversion round-trips to the intended Pakistan local hour',
   );
 
+  const originalAiApiKey = process.env.AI_API_KEY;
+  delete process.env.AI_API_KEY;
+  try {
+    const technicalPost = await generateLinkedInPost({
+      topic: 'What I Check Before Calling a Website SEO-Friendly',
+      goal: 'Educational',
+    });
+    const keywordPost = await generateLinkedInPost({
+      topic: 'Why Search Intent Matters More Than Keyword Volume',
+      goal: 'Educational',
+    });
+    const searchIntentImage = getTopicSpecificTakeaways('Search Intent Explained With a Simple Example');
+    const commercialKeywordsImage = getTopicSpecificTakeaways('Informational vs Commercial Keywords');
+    assert(
+      technicalPost.content.includes('robots rules') &&
+        technicalPost.content.includes('mobile') &&
+        keywordPost.content.includes('Classify the query') &&
+        keywordPost.content.includes('current results page'),
+      'Built-in LinkedIn generator tailors post body to the topic',
+    );
+    assert(
+      !technicalPost.content.includes('crystal-clear fundamentals') &&
+        !keywordPost.content.includes('crystal-clear fundamentals') &&
+        technicalPost.content !== keywordPost.content,
+      'Built-in LinkedIn generator does not repeat the same generic body across topics',
+    );
+    assert(
+      searchIntentImage.length === 6 &&
+        commercialKeywordsImage.length === 6 &&
+        searchIntentImage.join(' ').includes('Classify the query') &&
+        commercialKeywordsImage.join(' ').includes('Informational searches ask for an explanation') &&
+        searchIntentImage.join(' ') !== commercialKeywordsImage.join(' ') &&
+        [...searchIntentImage, ...commercialKeywordsImage].every((takeaway) => takeaway.length <= 160 && !/\b(?:the|and|a|to|of|for|or)$/.test(takeaway)),
+      'Daily SEO images get six concise, topic-specific insights instead of repeated generic text',
+    );
+  } finally {
+    if (originalAiApiKey !== undefined) process.env.AI_API_KEY = originalAiApiKey;
+  }
+
   // 6. Branded image generation test
   const brandedImage = await generateBrandedDailyImage({
-    dayNumber: 3,
-    topic: 'Search intent before keyword volume',
-    takeaways: ['Understand what searchers need.', 'Match pages to intent.', 'Measure qualified results.'],
+    dayNumber: 36,
+    topic: 'Informational vs Commercial Keywords',
+    takeaways: getTopicSpecificTakeaways('Informational vs Commercial Keywords'),
   });
   assert(
     brandedImage.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) &&

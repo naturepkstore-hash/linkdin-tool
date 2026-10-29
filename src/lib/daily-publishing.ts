@@ -1,7 +1,7 @@
 import { SEO_365_PLAN } from '@/data/seo365Plan';
 import { BRAND_THEME } from '@/config/brandingTheme';
 import { generateBrandedDailyImage } from '@/lib/brand-image';
-import { generateLinkedInPost } from '@/lib/ai';
+import { generateLinkedInPost, getTopicSpecificTakeaways } from '@/lib/ai';
 import { prisma } from '@/lib/prisma';
 import { getLocalDateParts, getLocalDayBounds, zonedDateTimeToUtc } from '@/lib/timezone';
 import { isCanonicalSeo365Series } from '@/lib/seo365';
@@ -13,31 +13,6 @@ function parsePostingTime(value: string): { hour: number; minute: number } {
   const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(value);
   if (!match) throw new Error(`Invalid configured daily posting time: ${value}`);
   return { hour: Number(match[1]), minute: Number(match[2]) };
-}
-
-function getTakeaways(content: string, topic: string): string[] {
-  const lines = content.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  const takeaways: string[] = [];
-
-  for (let index = 0; index < lines.length && takeaways.length < 3; index++) {
-    const match = /^(?:\d+[.)]|[•*-])\s*(.+)$/.exec(lines[index]);
-    if (!match) continue;
-
-    const detail = lines[index + 1] && !/^(?:\d+[.)]|[•*-]|#)/.test(lines[index + 1])
-      ? ` ${lines[index + 1]}`
-      : '';
-    takeaways.push(`${match[1]}${detail}`.slice(0, 110));
-  }
-
-  if (takeaways.length === 0) {
-    return [
-      `Learn the core principles behind ${topic}.`,
-      'Turn the idea into a repeatable process.',
-      'Measure results and improve with each cycle.',
-    ];
-  }
-
-  return takeaways;
 }
 
 function getLength(value: string | undefined): 'Short' | 'Medium' | 'Long' {
@@ -123,7 +98,7 @@ export async function scheduleDueDailySeriesPosts(now = new Date()): Promise<num
     const imageBytes = await generateBrandedDailyImage({
       dayNumber: nextDay.dayNumber,
       topic: nextDay.topic,
-      takeaways: getTakeaways(generated.content, nextDay.topic),
+      takeaways: getTopicSpecificTakeaways(nextDay.topic),
     });
 
     await prisma.$transaction(async (transaction) => {
